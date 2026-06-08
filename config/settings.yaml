@@ -1,0 +1,98 @@
+camera:
+  source: 0            # 0 = first USB cam, 1 = second, or a video file path
+  width: 640
+  height: 480
+  fps: 30
+  use_picamera: false  # set true to use Raspberry Pi Camera Module via picamera2
+  use_threading: true  # dedicated capture thread reduces latency
+
+detection:
+  method: "background_subtraction"  # "background_subtraction" or "yolo"
+  background_subtractor: "MOG2"     # "MOG2" or "KNN"
+  min_contour_area: 2500            # px² — low enough to catch small boxes;
+                                    # dilation + NMS handles remaining fragments
+  max_contour_area: 100000          # px² — allow large/close boxes
+  nms_iou_threshold: 0.3            # suppress overlapping blobs from the same box
+  blur_kernel: 25                   # stronger blur merges fragmented box edges
+  dilate_iterations: 4              # heavy dilation merges a split box into one blob
+  history: 500
+  var_threshold: 40                 # slightly more sensitive to catch boxes reliably
+  detect_shadows: false
+
+  # ── Moving-objects-only filters ───────────────────────────────────────
+  learning_rate: 0.001              # slow absorption — stopped boxes stay in foreground
+  # With blur_kernel=25, a box moving 2 px/frame produces ~10 intensity units
+  # of per-pixel diff at its edges (contrast*shift/half-kernel ≈ 100*2/12).
+  # Threshold=8 catches that signal; camera noise (~1-3 px/frame) stays well
+  # below it.  Threshold=15 was too high for slow belts (box3.mp4 2 px/frame).
+  use_frame_diff: true
+  frame_diff_threshold: 8
+  motion_ratio_threshold: 0.005   # 0.5% of bbox — slow boxes only show edge pixels
+
+tracking:
+  max_disappeared: 30   # frames before an object is deregistered
+                        # at 24 fps = 1.25 seconds grace — enough for brief occlusion
+  max_distance: 160     # px — raised from 120.
+                        # A box moving at 30 px/frame disappearing for 4 frames
+                        # jumps 120 px; raising to 160 re-matches it instead of
+                        # creating a new ID and potentially double-counting.
+
+counting:
+  # Line at 50 % of frame width  →  x = 320 in a 640-wide frame.
+  # Boxes entering from the right are counted roughly halfway through
+  # their journey — well before the video can end on them.
+  line_position: 0.5
+
+  # Choose orientation to match how boxes move in your camera view:
+  #   Boxes move LEFT ↔ RIGHT  →  orientation: "vertical"    (line runs top↕bottom)
+  #   Boxes move UP   ↕ DOWN   →  orientation: "horizontal"  (line runs left↔right)
+  line_orientation: "vertical"
+
+  # Boxes on this belt only travel right → left.
+  direction: "right_to_left"
+
+  min_speed: 0.5               # px/frame — very low to avoid missing slow-moving boxes
+
+  # ── Zone-based counting ───────────────────────────────────────────────
+  # Count when a centroid crosses the RIGHT boundary of the zone:
+  #   right_boundary = line_coord + zone_width = 320 + 80 = 400
+  #
+  # Effect: a box entering the frame at x=750 is counted the moment it
+  # crosses x=400 (~14 frames / 0.6 s after first appearing), long before
+  # the video can end.  This also handles large frame-to-frame jumps —
+  # a centroid jumping from x=450 → x=380 in one frame (gap of 70 px)
+  # satisfies  450 > 400 >= 380  and is counted immediately.
+  zone_width: 80
+
+display:
+  show_bounding_boxes: true
+  show_tracking_ids: true
+  show_counting_line: true
+  show_fps: true
+  show_count: true
+  show_mask: false          # show foreground mask in a second window
+  line_color: [0, 255, 0]   # BGR
+  box_color: [0, 165, 255]
+  counted_color: [0, 0, 255]
+  text_color: [255, 255, 255]
+  save_snapshots: true
+  snapshot_dir: "snapshots"
+
+logging:
+  csv_enabled: true
+  sqlite_enabled: true
+  csv_path: "logs/counts.csv"
+  db_path: "logs/counts.db"
+  log_level: "DEBUG"
+  log_file: "logs/system.log"
+
+performance:
+  frame_skip: 0      # process 1 in every (n+1) frames; 0 = no skip
+  resize_factor: 1.0 # scale frames before detection; 0.5 halves CPU load
+
+yolo:
+  model_path: "models/yolov8n.pt"
+  confidence: 0.50
+  iou_threshold: 0.45
+  classes: null   # null = all classes; [0] = person; customise per COCO IDs
+  device: "cpu"   # "cpu" or "0" for CUDA GPU

@@ -1,0 +1,7 @@
+opencv-python>=4.8.0
+numpy>=1.24.0
+scipy>=1.11.0
+imutils>=0.5.4
+PyYAML>=6.0
+# picamera2>=0.3.12   # uncomment on Raspberry Pi OS
+# ultralytics>=8.0.0  # uncomment for YOLO detector
