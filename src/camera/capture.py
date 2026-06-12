@@ -70,6 +70,45 @@ class CameraCapture:
         frame = self._read_raw()
         return (frame is not None), frame
 
+    def sample_frames(self, n: int = 25) -> list:
+        """Evenly sample n frames across a file-backed source.
+
+        Restores the read position afterwards.  Returns [] for live cameras.
+        """
+        if (
+            self._cap is None
+            or self.use_threading
+            or not isinstance(self.source, str)
+        ):
+            return []
+        pos = self._cap.get(cv2.CAP_PROP_POS_FRAMES)
+        total = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        samples = []
+        if total > 0:
+            for i in range(n):
+                self._cap.set(cv2.CAP_PROP_POS_FRAMES, int(i * total / n))
+                ok, frame = self._cap.read()
+                if ok:
+                    samples.append(frame)
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
+        return samples
+
+    def rewind(self) -> bool:
+        """Seek a file-backed source back to frame 0.
+
+        No-op (returns False) for live cameras and threaded captures.
+        Lets callers warm up the background model on the first frames of a
+        video and then replay them, so crossings near the start of the file
+        are not lost to warmup.
+        """
+        if (
+            self._cap is not None
+            and not self.use_threading
+            and isinstance(self.source, str)
+        ):
+            return bool(self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0))
+        return False
+
     def stop(self) -> None:
         self._running = False
         if self._thread is not None:

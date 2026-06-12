@@ -79,6 +79,16 @@ def _build_detector(cfg: dict):
             classes=yolo_cfg.get("classes"),
             device=yolo_cfg.get("device", "cpu"),
         )
+    if method == "yolo_world":
+        from src.detection.yolo_detector import YOLODetector
+        yw_cfg = cfg.get("yolo_world", {})
+        return YOLODetector(
+            model_path=yw_cfg.get("model_path", "models/yolov8s-worldv2.pt"),
+            confidence=yw_cfg.get("confidence", 0.05),
+            iou_threshold=yw_cfg.get("iou_threshold", 0.45),
+            device=yw_cfg.get("device", "cpu"),
+            prompt_classes=yw_cfg.get("prompt_classes", ["cardboard box"]),
+        )
     return BackgroundSubtractorDetector(
         method=det_cfg.get("background_subtractor", "MOG2"),
         min_contour_area=det_cfg.get("min_contour_area", 2000),
@@ -188,6 +198,7 @@ class ConveyorCounter:
 
         self._paused = False
         self._frame_index = 0
+        self._frame_size_synced = False
 
     # ------------------------------------------------------------------
     # Public
@@ -222,8 +233,50 @@ class ConveyorCounter:
     # Internal
     # ------------------------------------------------------------------
 
+    def _sync_frame_size(self, frame: np.ndarray) -> None:
+        """Recompute counting geometry from the actual processed frame.
+
+        Video files keep their native resolution regardless of the
+        configured camera width/height, so the line/zone coordinates must
+        come from the frames we actually process, not from the config.
+        """
+        h, w = frame.shape[:2]
+        if (w, h) != (self._counter.frame_width, self._counter.frame_height):
+            self.log.info(
+                "Actual frame size %dx%d differs from configured %dx%d — "
+                "recomputing counting line",
+                w, h, self._counter.frame_width, self._counter.frame_height,
+            )
+            self._counter.update_frame_size(w, h)
+        self._frame_size_synced = True
+
     def _warm_up(self, frames: int = 30) -> None:
-        """Feed background-subtractor a few frames before processing starts."""
+        """Prepare the background model before counting starts.
+
+        Video files: prime from a per-pixel median of frames sampled across
+        the clip — no frames are consumed and objects near the start are not
+        absorbed into the background.  Falls back to fast-learning warmup +
+        rewind when the belt is too busy for a clean median.
+        Live cameras: fast-learning warmup over the first frames (original
+        behaviour).
+        """
+        if not hasattr(self._detector, "learning_rate"):
+            return  # YOLO detectors need no background warmup
+
+        if self._is_video_file and hasattr(self._detector, "prime"):
+            from src.detection.background_subtractor import estimate_background
+            samples = [self._preprocess(f) for f in self._camera.sample_frames(25)]
+            if samples and not self._frame_size_synced:
+                self._sync_frame_size(samples[0])
+            background = estimate_background(samples) if samples else None
+            if background is not None:
+                self._detector.prime(background)
+                self.log.info(
+                    "Background primed from median of %d sampled frames",
+                    len(samples),
+                )
+                return
+
         self.log.info("Warming up background model (%d frames)…", frames)
         delay = max(0.001, 1.0 / max(self._camera.actual_fps, 1))
         # Use a fast learning rate during warmup so the belt texture is
@@ -242,9 +295,15 @@ class ConveyorCounter:
                     )
                 break
             proc = self._preprocess(frame)
+            if not self._frame_size_synced:
+                self._sync_frame_size(proc)
             self._detector.detect(proc)
             time.sleep(delay)
         self._detector.learning_rate = original_lr
+        # Replay the warmup frames for video files so crossings near the
+        # start of the file are not silently consumed by warmup.
+        if self._is_video_file and self._camera.rewind():
+            self.log.info("Rewound video to frame 0 after warmup")
 
     def _loop(self) -> None:
         consecutive_empty = 0
@@ -282,6 +341,8 @@ class ConveyorCounter:
                 continue
 
             proc_frame = self._preprocess(frame)
+            if not self._frame_size_synced:
+                self._sync_frame_size(proc_frame)
             detections, fg_mask = self._detector.detect(proc_frame)
 
             tracker_input = [(d.centroid, d.bbox) for d in detections]
@@ -389,7 +450,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--method",
-        choices=["background_subtraction", "yolo"],
+        choices=["background_subtraction", "yolo", "yolo_world"],
         help="Override detection method",
     )
     return parser.parse_args()

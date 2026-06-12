@@ -140,7 +140,25 @@ python3 main.py --source /dev/video0 --method background_subtraction
 
 # Run calibration tool first (recommended for new setups)
 python3 calibration/calibrate.py
+
+# Open-vocabulary detection — finds "cardboard box" with zero training
+# (most accurate; needs ultralytics + ~26 MB model, auto-downloaded)
+python3 main.py --source ~/videos/belt.mp4 --method yolo_world
 ```
+
+### Measuring accuracy
+
+`eval.py` runs the full pipeline headless over video files and compares the
+final count against a manual ground truth:
+
+```bash
+python3 eval.py ~/videos/belt1.mp4 ~/videos/belt2.mp4 \
+    --method yolo_world \
+    --truth belt1.mp4=12,belt2.mp4=7
+```
+
+Run it after every parameter change — counting accuracy is not visible from
+unit tests alone.
 
 ---
 
@@ -152,7 +170,7 @@ All parameters live in `config/settings.yaml`.  Key sections:
 
 | Key | Default | Effect |
 |-----|---------|--------|
-| `method` | `background_subtraction` | Switch to `yolo` for YOLO detector |
+| `method` | `background_subtraction` | `yolo` = fixed-class model (needs training for boxes); `yolo_world` = open-vocabulary, detects boxes from the `yolo_world.prompt_classes` text prompt with no training |
 | `min_contour_area` | 2000 | Ignore blobs smaller than N px² (noise filter) |
 | `max_contour_area` | 50000 | Ignore blobs larger than N px² (belt-edge filter) |
 | `var_threshold` | 50 | MOG2 sensitivity — lower = more sensitive |

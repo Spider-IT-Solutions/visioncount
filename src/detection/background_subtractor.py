@@ -7,6 +7,34 @@ from typing import List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def estimate_background(
+    frames: List[np.ndarray], stability_threshold: float = 6.0
+) -> Optional[np.ndarray]:
+    """Estimate a clean background as the per-pixel median of sampled frames.
+
+    Moving objects vanish in the median as long as each pixel is object-free
+    in >50% of the samples.  On busy belts (occupancy above 50%) the median
+    smears object pixels into the background and priming with it would hide
+    real objects — detected by comparing medians of the odd and even sample
+    halves: a true background is stable across both, a contaminated one is
+    not.  Returns None when contaminated; callers should fall back to
+    frame-by-frame warmup.
+    """
+    if len(frames) < 4:
+        return None
+    stack = np.stack(frames)
+    m1 = np.median(stack[::2], axis=0)
+    m2 = np.median(stack[1::2], axis=0)
+    diff = np.abs(m1.astype(int) - m2.astype(int)).mean()
+    if diff > stability_threshold:
+        logger.info(
+            "Median background unstable (diff=%.1f > %.1f) — belt too busy, "
+            "skipping median priming", diff, stability_threshold,
+        )
+        return None
+    return np.median(stack, axis=0).astype("uint8")
+
+
 @dataclass
 class Detection:
     """One detected object — bounding box, centroid, area, and optional confidence."""
@@ -122,21 +150,25 @@ class BackgroundSubtractorDetector:
         # Keep only definite foreground (255); discard shadows (127)
         _, bgs_mask = cv2.threshold(bgs_mask, 200, 255, cv2.THRESH_BINARY)
 
-        # ── Layer 2: frame differencing ────────────────────────────────
+        # ── Layer 2: frame differencing (per-contour classifier) ───────
+        # NOTE: deliberately NOT ANDed with the BGS mask.  A uniformly
+        # coloured box only produces frame-diff at its edges (interior
+        # pixels slide over identically coloured pixels), so an AND mask
+        # reduces slow boxes to thin slivers that the erosion below wipes
+        # out entirely.  Instead, contours come from the BGS mask alone and
+        # the diff mask is used afterwards to classify each contour as
+        # moving or static.
+        diff_mask: Optional[np.ndarray] = None
         if self.use_frame_diff and self._prev_gray is not None:
             diff = cv2.absdiff(self._prev_gray, blurred)
             _, diff_mask = cv2.threshold(
                 diff, self.frame_diff_threshold, 255, cv2.THRESH_BINARY
             )
-            # AND: pixel must show up in BOTH masks to count as moving
-            combined = cv2.bitwise_and(bgs_mask, diff_mask)
-        else:
-            combined = bgs_mask
 
         self._prev_gray = blurred  # save for next frame
 
         # ── Morphological cleanup ──────────────────────────────────────
-        combined = cv2.erode(combined, self._kernel, iterations=1)
+        combined = cv2.erode(bgs_mask, self._kernel, iterations=1)
         combined = cv2.dilate(combined, self._kernel, iterations=self.dilate_iterations)
         combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, self._kernel)
 
@@ -145,9 +177,10 @@ class BackgroundSubtractorDetector:
         )
 
         # ── Per-contour motion ratio check ────────────────────────────
-        # Build a lightweight diff mask for the ratio check even if
-        # use_frame_diff is False (diff_mask may not exist above).
-        ratio_mask = combined  # already incorporates diff if available
+        # Checked against the RAW diff mask: a stopped box has ~zero diff
+        # anywhere in its bbox and is rejected; a slow box still shows
+        # diff along its edges, which is enough to pass a small threshold.
+        ratio_mask = diff_mask
 
         detections: List[Detection] = []
         for contour in contours:
@@ -158,11 +191,12 @@ class BackgroundSubtractorDetector:
             x, y, w, h = cv2.boundingRect(contour)
 
             # Verify the contour contains enough actively-moving pixels
-            roi = ratio_mask[y: y + h, x: x + w]
-            if roi.size > 0:
-                motion_ratio = np.count_nonzero(roi) / roi.size
-                if motion_ratio < self.motion_ratio_threshold:
-                    continue   # mostly static — skip
+            if ratio_mask is not None:
+                roi = ratio_mask[y: y + h, x: x + w]
+                if roi.size > 0:
+                    motion_ratio = np.count_nonzero(roi) / roi.size
+                    if motion_ratio < self.motion_ratio_threshold:
+                        continue   # mostly static — skip
 
             cx, cy = x + w // 2, y + h // 2
             detections.append(Detection(
@@ -181,6 +215,23 @@ class BackgroundSubtractorDetector:
         self._bg_sub = self._build_subtractor()
         self._prev_gray = None
         logger.info("Background model reset")
+
+    def prime(self, background: np.ndarray) -> None:
+        """Initialise the background model from a clean background image.
+
+        Intended for video files: build a per-pixel median over frames
+        sampled across the whole clip (objects move, the belt does not, so
+        the median is an object-free belt) and prime the model with it.
+        Avoids the warmup dilemma where either the first N frames are
+        consumed (missed crossings) or objects present early in the clip
+        get absorbed into the background.
+        """
+        gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (self.blur_kernel, self.blur_kernel), 0)
+        for _ in range(10):
+            self._bg_sub.apply(blurred, learningRate=0.5)
+        self._prev_gray = None
+        logger.info("Background model primed from median frame")
 
     # ------------------------------------------------------------------
     # NMS helpers

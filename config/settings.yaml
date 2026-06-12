@@ -7,7 +7,13 @@ camera:
   use_threading: true  # dedicated capture thread reduces latency
 
 detection:
-  method: "background_subtraction"  # "background_subtraction" or "yolo"
+  # "background_subtraction" — fastest, no model, but fails when the belt is
+  #     continuously covered by same-coloured objects (they become background).
+  # "yolo"        — fixed-class YOLOv8 model (needs a model trained on your boxes;
+  #     stock COCO weights do NOT detect cardboard boxes).
+  # "yolo_world"  — open-vocabulary YOLO-World, detects boxes from a text prompt
+  #     with no training. Most accurate out of the box; heaviest on CPU.
+  method: "background_subtraction"
   background_subtractor: "MOG2"     # "MOG2" or "KNN"
   min_contour_area: 2500            # px² — low enough to catch small boxes;
                                     # dilation + NMS handles remaining fragments
@@ -96,3 +102,12 @@ yolo:
   iou_threshold: 0.45
   classes: null   # null = all classes; [0] = person; customise per COCO IDs
   device: "cpu"   # "cpu" or "0" for CUDA GPU
+
+yolo_world:
+  model_path: "models/yolov8s-worldv2.pt"   # auto-downloads on first use
+  prompt_classes: ["cardboard box"]          # free-text, no training needed
+  confidence: 0.05    # world models score conservatively — keep low and let
+                      # the tracker/counter reject spurious blips
+                      # (eval on 3 test videos: 0.05 → 18/19, 0.15 → 13/19)
+  iou_threshold: 0.45
+  device: "cpu"

@@ -44,11 +44,13 @@ class YOLODetector:
         iou_threshold: float = 0.45,
         classes: Optional[List[int]] = None,
         device: str = "cpu",
+        prompt_classes: Optional[List[str]] = None,
     ) -> None:
         self.confidence = confidence
         self.iou_threshold = iou_threshold
         self.classes = classes
         self.device = device
+        self.prompt_classes = prompt_classes
         self._model = None
         self._load_model(model_path)
 
@@ -58,6 +60,11 @@ class YOLODetector:
 
             self._model = YOLO(model_path)
             self._model.to(self.device)
+            if self.prompt_classes:
+                # Open-vocabulary models (YOLO-World) take free-text class
+                # prompts — detects arbitrary objects with no fine-tuning.
+                self._model.set_classes(self.prompt_classes)
+                logger.info("Prompt classes set: %s", self.prompt_classes)
             logger.info("YOLO model loaded: %s on %s", model_path, self.device)
         except ImportError as exc:
             raise ImportError(

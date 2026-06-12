@@ -50,9 +50,13 @@ class TrackedObject:
     ) -> None:
         if self.centroids:
             prev = self.centroids[-1]
+            # The object may have been invisible for `disappeared` frames, so
+            # the measured delta spans (disappeared + 1) frames.  Divide to get
+            # a true per-frame velocity, otherwise speed spikes after a gap.
+            gap = self.disappeared + 1
             self.velocity = (
-                float(centroid[0] - prev[0]),
-                float(centroid[1] - prev[1]),
+                float(centroid[0] - prev[0]) / gap,
+                float(centroid[1] - prev[1]) / gap,
             )
         self.centroid = centroid
         self.centroids.append(centroid)
@@ -61,6 +65,15 @@ class TrackedObject:
         if bbox is not None:
             self.bbox = bbox
         self.disappeared = 0
+
+    def predict(self, frames_ahead: int) -> Tuple[float, float]:
+        """Constant-velocity position estimate `frames_ahead` frames from the
+        last measurement.  Conveyor motion is near-constant velocity, so this
+        is a cheap stand-in for a Kalman prediction step."""
+        return (
+            self.centroid[0] + self.velocity[0] * frames_ahead,
+            self.centroid[1] + self.velocity[1] * frames_ahead,
+        )
 
     @property
     def speed(self) -> float:
@@ -130,8 +143,16 @@ class CentroidTracker:
             return self.objects
 
         object_ids = list(self.objects.keys())
+        # Match against PREDICTED positions, not last-seen positions.  A box
+        # that goes undetected for k frames keeps moving down the belt; its
+        # frozen last position drifts max_distance away and the re-detection
+        # would spawn a new ID (ID churn → double counts / missed counts).
+        # Constant-velocity prediction keeps the gate centred on where the
+        # box actually is.  For objects seen last frame this predicts one
+        # frame ahead, which is equally correct.
         object_centroids = np.array(
-            [o.centroid for o in self.objects.values()], dtype="float"
+            [o.predict(o.disappeared + 1) for o in self.objects.values()],
+            dtype="float",
         )
 
         # Distance matrix: rows = existing objects, cols = new detections
