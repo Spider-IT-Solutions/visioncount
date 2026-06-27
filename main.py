@@ -119,10 +119,20 @@ class ConveyorCounter:
       - Gracefully shut down on quit or exception.
     """
 
-    def __init__(self, config_path: str = "config/settings.yaml") -> None:
+    def __init__(self, config_path: str = "config/settings.yaml",
+                 fast: bool = False, no_display: bool = False) -> None:
         self.cfg = _load_config(config_path)
         _setup_logging(self.cfg)
         self.log = logging.getLogger(self.__class__.__name__)
+        # fast = drop the video-playback throttle so the loop runs at the
+        # detector's true throughput (bg-sub ≈ 145-185 FPS) instead of being
+        # paced to the video's native FPS.  No effect on live cameras (those
+        # are already capped by the capture rate, not the throttle).
+        # no_display = headless: no GUI window, no per-frame render; logs FPS
+        # periodically.  This is the deployment path on a Pi (no monitor) and
+        # the way to benchmark true throughput.  Implies fast for video files.
+        self._no_display = no_display
+        self._fast = fast or no_display
 
         cam_cfg = self.cfg["camera"]
         perf_cfg = self.cfg.get("performance", {})
@@ -212,15 +222,19 @@ class ConveyorCounter:
         # For video files use the file's native FPS; for live cameras use 1 ms
         # (the capture thread already paces frame delivery).
         native_fps = self._camera.actual_fps
-        if self._is_video_file and native_fps > 0:
+        if self._is_video_file and native_fps > 0 and not self._fast:
             self._frame_delay_ms = max(1, int(1000 / native_fps))
             self.log.info("Video FPS detected: %.1f — playback delay: %d ms",
                           native_fps, self._frame_delay_ms)
         else:
             self._frame_delay_ms = 1
+            if self._fast and self._is_video_file:
+                self.log.info("Fast mode: playback throttle disabled — "
+                              "processing at full detector throughput")
 
         self._warm_up(frames=30)
-        cv2.namedWindow("VisionCount", cv2.WINDOW_NORMAL)
+        if not self._no_display:
+            cv2.namedWindow("VisionCount", cv2.WINDOW_NORMAL)
 
         try:
             self._loop()
@@ -309,12 +323,13 @@ class ConveyorCounter:
         consecutive_empty = 0
 
         while True:
-            # waitKey paces playback and polls keyboard.
-            # For video files this is the primary throttle (frame_delay_ms ≈ 1/fps).
-            key = cv2.waitKey(self._frame_delay_ms) & 0xFF
-            if key in (ord("q"), 27):
-                break
-            self._handle_key(key, None)
+            if not self._no_display:
+                # waitKey paces playback and polls keyboard.
+                # For video files this is the primary throttle (frame_delay_ms ≈ 1/fps).
+                key = cv2.waitKey(self._frame_delay_ms) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+                self._handle_key(key, None)
 
             ok, frame = self._camera.read()
             if not ok or frame is None:
@@ -364,16 +379,24 @@ class ConveyorCounter:
 
             newly_counted = self._counter.update(objects)
 
-            annotated = self._display.render(
-                proc_frame, objects, self._counter, self._fps_counter.fps, newly_counted
-            )
+            if not self._no_display:
+                annotated = self._display.render(
+                    proc_frame, objects, self._counter, self._fps_counter.fps, newly_counted
+                )
 
-            if self._show_mask and fg_mask is not None:
-                mask_bgr = cv2.cvtColor(fg_mask, cv2.COLOR_GRAY2BGR)
-                annotated = np.hstack([annotated, mask_bgr])
+                if self._show_mask and fg_mask is not None:
+                    mask_bgr = cv2.cvtColor(fg_mask, cv2.COLOR_GRAY2BGR)
+                    annotated = np.hstack([annotated, mask_bgr])
 
-            cv2.imshow("VisionCount", annotated)
+                cv2.imshow("VisionCount", annotated)
+
             self._fps_counter.tick()
+
+            # Headless: no overlay to read FPS off, so log it periodically.
+            if self._no_display and self._frame_index % 120 == 0:
+                self.log.info("processed %d frames — %.1f FPS — count=%d",
+                              self._frame_index, self._fps_counter.fps,
+                              self._counter.count)
 
     def _preprocess(self, frame: np.ndarray) -> np.ndarray:
         if self._resize_factor != 1.0:
@@ -453,6 +476,20 @@ def _parse_args() -> argparse.Namespace:
         choices=["background_subtraction", "yolo", "yolo_world"],
         help="Override detection method",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Disable video-playback throttle; process at full detector "
+             "throughput (100+ FPS with background_subtraction). No effect "
+             "on live cameras.",
+    )
+    parser.add_argument(
+        "--no-display",
+        action="store_true",
+        help="Headless: no GUI window or per-frame render; logs FPS every "
+             "120 frames. The deployment path (Pi, no monitor) and the way "
+             "to benchmark true throughput. Implies --fast for video files.",
+    )
     return parser.parse_args()
 
 
@@ -486,7 +523,9 @@ def main() -> None:
             yaml.dump(cfg, tmp)
             cfg_path = tmp.name
 
-    ConveyorCounter(config_path=cfg_path).run()
+    ConveyorCounter(
+        config_path=cfg_path, fast=args.fast, no_display=args.no_display
+    ).run()
 
 
 if __name__ == "__main__":
