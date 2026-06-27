@@ -138,6 +138,13 @@ python3 main.py
 # Override source and method from CLI
 python3 main.py --source /dev/video0 --method background_subtraction
 
+# Run a video at full speed (drop the playback throttle) with the live window
+python3 main.py --source ~/videos/belt.mp4 --fast
+
+# Headless: no GUI window, logs FPS every 120 frames — the Raspberry Pi
+# deploy path (no monitor) and the way to benchmark true throughput
+python3 main.py --source ~/videos/belt.mp4 --no-display
+
 # Run calibration tool first (recommended for new setups)
 python3 calibration/calibrate.py
 
@@ -145,6 +152,15 @@ python3 calibration/calibrate.py
 # (most accurate; needs ultralytics + ~26 MB model, auto-downloaded)
 python3 main.py --source ~/videos/belt.mp4 --method yolo_world
 ```
+
+### CLI flags
+
+| Flag | Effect |
+|------|--------|
+| `--source PATH\|INDEX` | Camera index (e.g. `0`) or video file path |
+| `--method NAME` | `background_subtraction` (default), `yolo`, `yolo_world` |
+| `--fast` | Drop the video-playback throttle; process at the detector's true rate. No effect on live cameras (paced by capture rate). |
+| `--no-display` | Headless — no GUI window or per-frame render; logs FPS every 120 frames. Implies `--fast` for video files. Use on a Pi with no monitor. |
 
 ### Measuring accuracy
 
@@ -159,6 +175,14 @@ python3 eval.py ~/videos/belt1.mp4 ~/videos/belt2.mp4 \
 
 Run it after every parameter change — counting accuracy is not visible from
 unit tests alone.
+
+**Measured accuracy** on the three ground-truth clips (19 boxes total):
+`background_subtraction` counts **18/19 (94.7%)** — matching the heavier
+`yolo_world` detector — after raising `motion_ratio_threshold` to `0.01`.
+`background_subtraction` does this at **~150–185 FPS** end-to-end on a
+typical x86 dev machine (headless), versus ~5 FPS for `yolo_world` on CPU.
+Background subtraction is motion-based, so these numbers assume a clean,
+fixed-camera belt; busy or hand-held scenes need a trained detector.
 
 ---
 
@@ -177,6 +201,7 @@ All parameters live in `config/settings.yaml`.  Key sections:
 | `history` | 500 | Frames used to build background model |
 | `blur_kernel` | 21 | Gaussian blur radius — must be odd |
 | `dilate_iterations` | 2 | Morphological dilation passes — fills gaps |
+| `motion_ratio_threshold` | 0.01 | Fraction of a contour's bbox that must be in motion to count it. Raising 0.005 → 0.01 rejects noise blobs near the line; lifted counting 17/19 → 18/19. Stable basin 0.01–0.02. |
 
 ### `counting`
 
@@ -361,7 +386,7 @@ SELECT MAX(total_count) FROM counts;
 | MOG2 over KNN | ~20% faster | `background_subtractor: MOG2` |
 | Reduce history | Faster model update | `history: 200` |
 | Disable snapshots | Removes disk I/O spikes | `save_snapshots: false` |
-| Headless mode | Skip `cv2.imshow` | Pipe to a file or use a flag |
+| Headless mode | Skip `cv2.imshow` + render | `--no-display` flag |
 | Overclock Pi 4 | 10–20% faster | `arm_freq=2000` in `/boot/config.txt` |
 
 Expected FPS on Pi 4 @ 640×480:
