@@ -33,7 +33,9 @@ detection:
   # below it.  Threshold=15 was too high for slow belts (box3.mp4 2 px/frame).
   use_frame_diff: true
   frame_diff_threshold: 8
-  motion_ratio_threshold: 0.005   # 0.5% of bbox — slow boxes only show edge pixels
+  motion_ratio_threshold: 0.01    # 1% of bbox — stable basin (0.01–0.02 all eval 18/19);
+                                  # rejects noise blobs near the line that caused box2 miss.
+                                  # 0.005 left those in → ID churn → undercount (eval: 17/19).
 
 tracking:
   max_disappeared: 30   # frames before an object is deregistered
