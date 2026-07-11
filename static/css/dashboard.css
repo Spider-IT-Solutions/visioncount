@@ -144,6 +144,22 @@ input[type="number"], input[type="text"], select {
 
 .action-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 
+.build-log {
+  background: #0a0f14;
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 10px;
+  margin: 8px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  color: #ffb3b3;
+  user-select: text;
+}
+
 .pp-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .pp-row {
   display: flex;

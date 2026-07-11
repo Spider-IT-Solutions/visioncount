@@ -560,22 +560,28 @@ function wireButtons() {
   qs("btn-build-app").addEventListener("click", () => {
     const btn = qs("btn-build-app");
     const status = qs("build-status");
+    const logEl = qs("build-log");
     const originalText = status.textContent;
     btn.disabled = true;
+    logEl.hidden = true;
+    logEl.textContent = "";
     status.textContent = "Building… (PyInstaller can take 10-60s, longer on first run)";
     fetchJSON("/api/projects/build", { method: "POST" })
       .then((d) => {
         if (d.success) {
-          status.textContent = "Built: " + d.exe_path;
+          status.textContent = "Built: " + d.exe_path + (d.log_path ? " (full log: " + d.log_path + ")" : "");
           showMsg("Build succeeded: " + d.exe_path);
         } else {
-          status.textContent = "Build failed — see message below.";
-          showMsg("Build failed: " + (d.log_tail || "unknown error").slice(-500));
+          status.textContent =
+            "Build failed" + (d.log_path ? " — full untruncated log saved to: " + d.log_path : "") +
+            ". Error output below (select all + copy to share it):";
+          logEl.textContent = d.log_tail || d.error || "unknown error — no output captured";
+          logEl.hidden = false;
         }
       })
       .catch(() => {
         status.textContent = originalText;
-        showMsg("Build request failed");
+        showMsg("Build request failed — could not reach the server");
       })
       .finally(() => {
         btn.disabled = false;

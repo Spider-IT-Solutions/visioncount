@@ -191,15 +191,18 @@ def main():
 
     if args.image:
         pipeline = VisionPipeline()
-        run_image_mode(args.image, cfg, pipeline, output_dir, logger)
+        run_image_mode(os.path.abspath(args.image), cfg, pipeline, output_dir, logger)
         return
 
     forced_single_pass = False
     annotate_video_path = None
 
     if args.video:
+        # Absolute path: CLI-supplied sources are relative to the caller's cwd,
+        # never to this app's own directory — resolving otherwise breaks once
+        # frozen (there is no meaningful "repo root" inside a PyInstaller bundle).
         cfg["camera"]["source_type"] = "file"
-        cfg["camera"]["source"] = args.video
+        cfg["camera"]["source"] = os.path.abspath(args.video)
         cfg["camera"]["loop"] = False
         forced_single_pass = True
         stem = os.path.splitext(os.path.basename(args.video))[0]
