@@ -29,11 +29,11 @@ class EventLogger:
         }
         if self.csv_enabled:
             write_header = not os.path.exists(self.csv_path)
-            with open(self.csv_path, "a", newline="") as f:
+            with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=["timestamp", "line_id", "track_id", "label"])
                 if write_header:
                     writer.writeheader()
                 writer.writerow(row)
         if self.json_enabled:
-            with open(self.jsonl_path, "a") as f:
+            with open(self.jsonl_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(row) + "\n")

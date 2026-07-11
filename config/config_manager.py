@@ -9,7 +9,7 @@ DEFAULTS_PATH = os.path.join(CONFIG_DIR, "defaults.json")
 
 
 def load_defaults():
-    with open(DEFAULTS_PATH) as f:
+    with open(DEFAULTS_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

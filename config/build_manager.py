@@ -56,7 +56,7 @@ def build_project(name):
         }
 
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             cfg = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         return {"success": False, "exe_path": None, "log_tail": f"invalid config.json: {e}", "log_path": None}
@@ -94,7 +94,10 @@ def build_project(name):
     ]
 
     try:
-        result = subprocess.run(cmd, cwd=BASE_DIR, capture_output=True, text=True, timeout=900)
+        result = subprocess.run(
+            cmd, cwd=BASE_DIR, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=900,
+        )
     except subprocess.TimeoutExpired as e:
         stdout = (e.stdout or "") if isinstance(e.stdout, str) else (e.stdout or b"").decode(errors="replace")
         stderr = (e.stderr or "") if isinstance(e.stderr, str) else (e.stderr or b"").decode(errors="replace")

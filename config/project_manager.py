@@ -49,7 +49,7 @@ class ProjectManager:
 
         cfg = load_defaults()
         cfg["project"]["name"] = name
-        with open(self._config_path(name), "w") as f:
+        with open(self._config_path(name), "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
 
         self._write_labels(project_dir, cfg)
@@ -61,7 +61,7 @@ class ProjectManager:
         path = self._config_path(name)
         if not os.path.isfile(path):
             raise ValueError(f"project '{name}' not found")
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
         self.current_name = name
         return cfg
@@ -72,7 +72,7 @@ class ProjectManager:
         project_dir = self._project_dir(self.current_name)
         cfg = copy.deepcopy(cfg)
         cfg["project"]["name"] = self.current_name
-        with open(self._config_path(self.current_name), "w") as f:
+        with open(self._config_path(self.current_name), "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
         self._write_runtime(project_dir, self.current_name)
         return cfg
@@ -81,12 +81,16 @@ class ProjectManager:
         labels_path = os.path.join(project_dir, cfg["model"].get("labels_file") or "labels.txt")
         if not os.path.exists(labels_path):
             classes = cfg.get("filters", {}).get("classes") or ["object"]
-            with open(labels_path, "w") as f:
+            with open(labels_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(classes) + "\n")
 
     def _write_runtime(self, project_dir, name):
         from pipeline.runtime_template import render_runtime
-        with open(os.path.join(project_dir, "runtime.py"), "w") as f:
+        # Explicit utf-8: on Windows, plain open(path, "w") uses the system
+        # locale codepage (often cp1252), which silently mis-encodes the
+        # em-dashes in the generated docstring — PyInstaller's source parser
+        # then fails with UnicodeDecodeError trying to read it back as UTF-8.
+        with open(os.path.join(project_dir, "runtime.py"), "w", encoding="utf-8") as f:
             f.write(render_runtime(name))
 
 
