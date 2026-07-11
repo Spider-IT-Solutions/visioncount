@@ -1,0 +1,55 @@
+name: Build Application (Windows / macOS / Linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project folder name under Projects/ to build (exact match)"
+        required: true
+        default: "Bottle Counter"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build via build_manager.py (same code path as the Studio's Build button)
+        shell: bash
+        run: |
+          python -c "
+          import json, sys
+          from config.build_manager import build_project
+          result = build_project('${{ inputs.project_name }}')
+          print(json.dumps(result, indent=2))
+          with open('build_result.json', 'w') as f:
+              json.dump(result, f)
+          sys.exit(0 if result['success'] else 1)
+          "
+
+      - name: Resolve executable path
+        id: exe
+        shell: bash
+        run: |
+          python -c "
+          import json
+          d = json.load(open('build_result.json'))
+          print('path=' + d['exe_path'])
+          " >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.project_name }}-${{ matrix.os }}
+          path: ${{ steps.exe.outputs.path }}
+          if-no-files-found: error

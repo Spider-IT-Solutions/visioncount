@@ -1,0 +1,157 @@
+{
+  "project": {
+    "name": "Bottle Counter",
+    "version": "1.0",
+    "plugin": "object_counting"
+  },
+  "camera": {
+    "source_type": "file",
+    "source": "cement-1.mp4",
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "loop": false,
+    "rotation": 0,
+    "flip": "none",
+    "exposure": 0,
+    "brightness": 0,
+    "contrast": 0,
+    "saturation": 0,
+    "gain": 0
+  },
+  "preprocessing": {
+    "blur": {
+      "enabled": false,
+      "kernel": 3
+    },
+    "gaussian_blur": {
+      "enabled": false,
+      "kernel": 3,
+      "sigma": 0
+    },
+    "median_blur": {
+      "enabled": false,
+      "kernel": 3
+    },
+    "clahe": {
+      "enabled": true,
+      "clip_limit": 3.0,
+      "tile_grid": 8
+    },
+    "hist_eq": {
+      "enabled": false
+    },
+    "sharpen": {
+      "enabled": false,
+      "amount": 0
+    },
+    "gamma": {
+      "enabled": false,
+      "value": 1.0
+    },
+    "denoise": {
+      "enabled": false,
+      "strength": 10
+    },
+    "morphology": {
+      "enabled": true,
+      "operation": "open",
+      "kernel": 5,
+      "iterations": 1
+    }
+  },
+  "color_calibration": {
+    "mode": "hsv",
+    "hsv": {
+      "l_h": 0,
+      "l_s": 44,
+      "l_v": 122,
+      "u_h": 179,
+      "u_s": 255,
+      "u_v": 255
+    },
+    "rgb": null,
+    "lab": null
+  },
+  "roi": {
+    "shapes": [
+      {
+        "id": 1,
+        "name": "main",
+        "type": "rect",
+        "enabled": true,
+        "x": 241,
+        "y": 21,
+        "w": 290,
+        "h": 390
+      }
+    ]
+  },
+  "counting": {
+    "lines": [
+      {
+        "backward_label": "OUT",
+        "enabled": true,
+        "forward_label": "IN",
+        "id": 1,
+        "name": "line1",
+        "x1": 474,
+        "x2": 263,
+        "y1": 81,
+        "y2": 84
+      }
+    ],
+    "entry_zone": null,
+    "exit_zone": null
+  },
+  "detection": {
+    "backend": "hsv_contour",
+    "confidence_threshold": 0.5,
+    "nms_threshold": 0.4,
+    "sensitivity": 50
+  },
+  "model": {
+    "name": null,
+    "path": null,
+    "input_width": 300,
+    "input_height": 300,
+    "labels_file": "labels.txt"
+  },
+  "tracking": {
+    "tracker_type": "centroid",
+    "max_distance": 35,
+    "object_timeout": 10,
+    "iou_threshold": 0.3
+  },
+  "filters": {
+    "min_area": 500,
+    "max_area": 60000,
+    "min_width": 10,
+    "max_width": 640,
+    "min_height": 10,
+    "max_height": 480,
+    "aspect_min": 0.2,
+    "aspect_max": 5.0,
+    "classes": [
+      "object"
+    ]
+  },
+  "output": {
+    "save_snapshots": false,
+    "save_videos": false,
+    "output_folder": "output",
+    "csv_logging": true,
+    "json_logging": false,
+    "show_window": false
+  },
+  "logging": {
+    "level": "info"
+  },
+  "performance": {
+    "thread_count": 2,
+    "gpu": false,
+    "pi_optimization": false,
+    "frame_skip": 0,
+    "resize_factor": 1.0
+  }
+}

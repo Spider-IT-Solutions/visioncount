@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Conveyor Vision — Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Vision <span class="accent">Configuration Studio</span></h1>
+    <div class="status-group">
+      <span id="project-status" class="badge badge-on">PROJECT: —</span>
+      <span id="cam-status" class="badge badge-off">CAMERA: —</span>
+      <span id="rec-status" class="badge badge-off">REC: OFF</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- Live feed + stats -->
+    <section class="panel panel-feed">
+      <h2>Live Feed</h2>
+      <div class="stream-wrap">
+        <img id="stream" src="/video_feed" width="640" height="480">
+        <canvas id="overlay" width="640" height="480"></canvas>
+      </div>
+      <p class="hint">Drag the white ROI box / handle and the cyan counting-line endpoints directly on the video.</p>
+    </section>
+
+    <section class="panel panel-stats">
+      <h2>Statistics</h2>
+      <dl class="stats-list" id="stats-list">
+        <div><dt>Session Total</dt><dd id="stat-total">0</dd></div>
+        <div><dt>IN / OUT</dt><dd><span id="stat-in">0</span> / <span id="stat-out">0</span></dd></div>
+        <div><dt>Objects / min</dt><dd id="stat-opm">0</dd></div>
+        <div><dt>Live Object Count</dt><dd id="stat-objects">0</dd></div>
+        <div><dt>Avg Confidence</dt><dd id="stat-conf">0</dd></div>
+        <div><dt>FPS</dt><dd id="stat-fps">0</dd></div>
+        <div><dt>Processing Time</dt><dd id="stat-proc">0 ms</dd></div>
+        <div><dt>CPU</dt><dd id="stat-cpu">0%</dd></div>
+        <div><dt>RAM</dt><dd id="stat-ram">0%</dd></div>
+        <div><dt>Pi Temp</dt><dd id="stat-temp">—</dd></div>
+      </dl>
+      <button id="btn-reset-counts" class="btn btn-warn">Reset Session Count</button>
+    </section>
+
+    <!-- HSV calibration -->
+    <section class="panel panel-hsv">
+      <h2>Color Calibration (HSV)</h2>
+      <div class="action-row" id="frame-controls">
+        <button id="btn-pause" class="btn">Pause</button>
+        <button id="btn-play" class="btn">Play</button>
+        <button id="btn-prev-frame" class="btn">◀ Frame</button>
+        <button id="btn-next-frame" class="btn">Frame ▶</button>
+        <input type="range" id="frame-scrub" min="0" max="0" value="0" style="flex:1; min-width:150px;">
+        <span id="frame-label" class="hint">Frame — / —</span>
+      </div>
+      <p class="hint">Pause or step to a specific frame, then tune HSV below — mask/result update live against that still frame. File sources only.</p>
+      <div class="calib-views">
+        <div><span>Original</span><img src="/video_feed" width="200" height="150"></div>
+        <div><span>HSV Mask</span><img src="/video_feed/mask" width="200" height="150"></div>
+        <div><span>Final Detection</span><img src="/video_feed/hsv" width="200" height="150"></div>
+      </div>
+      <div class="slider-grid" id="hsv-controls">
+        <label>L-H <input type="range" id="l_h" min="0" max="179"><output></output></label>
+        <label>L-S <input type="range" id="l_s" min="0" max="255"><output></output></label>
+        <label>L-V <input type="range" id="l_v" min="0" max="255"><output></output></label>
+        <label>U-H <input type="range" id="u_h" min="0" max="179"><output></output></label>
+        <label>U-S <input type="range" id="u_s" min="0" max="255"><output></output></label>
+        <label>U-V <input type="range" id="u_v" min="0" max="255"><output></output></label>
+      </div>
+    </section>
+
+    <!-- ROI controls -->
+    <section class="panel panel-roi">
+      <h2>Region of Interest</h2>
+      <label class="checkbox"><input type="checkbox" id="roi_enabled"> Enabled</label>
+      <div class="field-grid">
+        <label>X <input type="number" id="roi_x"></label>
+        <label>Y <input type="number" id="roi_y"></label>
+        <label>W <input type="number" id="roi_w"></label>
+        <label>H <input type="number" id="roi_h"></label>
+      </div>
+      <p class="hint">Rect ROI editor above is single-shape. Multiple rect ROIs (OR logic) and polygon shapes are available via the config schema / API (<code>/api/roi/shapes</code>) — no multi-shape canvas editor yet.</p>
+    </section>
+
+    <!-- Detection controls -->
+    <section class="panel panel-detection">
+      <h2>Detection</h2>
+      <label>Model
+        <select id="model-select"></select>
+      </label>
+      <div class="slider-grid">
+        <label>Confidence Threshold <input type="range" id="confidence_threshold" min="0" max="1" step="0.01"><output></output></label>
+        <label>NMS Threshold <input type="range" id="nms_threshold" min="0" max="1" step="0.01"><output></output></label>
+        <label>Sensitivity <input type="range" id="sensitivity" min="0" max="100"><output></output></label>
+      </div>
+      <div class="field-grid">
+        <label>Min Area <input type="number" id="min_area"></label>
+        <label>Max Area <input type="number" id="max_area"></label>
+        <label>Min W <input type="number" id="min_width"></label>
+        <label>Max W <input type="number" id="max_width"></label>
+        <label>Min H <input type="number" id="min_height"></label>
+        <label>Max H <input type="number" id="max_height"></label>
+        <label>Aspect Min <input type="number" id="aspect_min" step="0.1"></label>
+        <label>Aspect Max <input type="number" id="aspect_max" step="0.1"></label>
+      </div>
+    </section>
+
+    <!-- Camera -->
+    <section class="panel panel-image">
+      <h2>Camera</h2>
+      <div class="slider-grid">
+        <label>Brightness <input type="range" id="brightness" min="-100" max="100"><output></output></label>
+        <label>Contrast <input type="range" id="contrast" min="-100" max="100"><output></output></label>
+        <label>Saturation <input type="range" id="saturation" min="-100" max="100"><output></output></label>
+        <label>Exposure <input type="range" id="exposure" min="-100" max="100"><output></output></label>
+        <label>Gain <input type="range" id="gain" min="-100" max="100"><output></output></label>
+      </div>
+      <div class="field-grid">
+        <label>Rotation
+          <select id="rotation">
+            <option value="0">0°</option>
+            <option value="90">90°</option>
+            <option value="180">180°</option>
+            <option value="270">270°</option>
+          </select>
+        </label>
+        <label>Flip
+          <select id="flip">
+            <option value="none">None</option>
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+            <option value="both">Both</option>
+          </select>
+        </label>
+      </div>
+      <h3>Camera Source</h3>
+      <div class="field-grid">
+        <label>Type
+          <select id="source_type">
+            <option value="file">Video File</option>
+            <option value="usb">USB Camera</option>
+            <option value="rtsp">RTSP / IP Camera</option>
+          </select>
+        </label>
+        <label>Source <input type="text" id="source"></label>
+        <label>Width <input type="number" id="cam_width"></label>
+        <label>Height <input type="number" id="cam_height"></label>
+        <label>FPS <input type="number" id="cam_fps"></label>
+      </div>
+      <div class="action-row">
+        <label class="checkbox"><input type="checkbox" id="cam_loop"> Loop video file</label>
+        <button id="btn-restart-video" class="btn">Restart Video</button>
+      </div>
+    </section>
+
+    <!-- Preprocessing -->
+    <section class="panel panel-preprocessing">
+      <h2>Preprocessing</h2>
+      <div class="pp-grid">
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_gamma_enabled"> Gamma</label>
+          <input type="range" id="pp_gamma_value" min="30" max="300"><output></output>
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_sharpen_enabled"> Sharpen</label>
+          <input type="range" id="pp_sharpen_amount" min="0" max="100"><output></output>
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_blur_enabled"> Blur</label>
+          kernel <input type="number" id="pp_blur_kernel" min="1" max="31" step="2" style="width:56px">
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_gaussian_blur_enabled"> Gaussian Blur</label>
+          kernel <input type="number" id="pp_gaussian_blur_kernel" min="1" max="31" step="2" style="width:56px">
+          sigma <input type="number" id="pp_gaussian_blur_sigma" min="0" max="20" style="width:56px">
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_median_blur_enabled"> Median Blur</label>
+          kernel <input type="number" id="pp_median_blur_kernel" min="1" max="31" step="2" style="width:56px">
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_clahe_enabled"> CLAHE</label>
+          clip <input type="number" id="pp_clahe_clip_limit" min="0.5" max="10" step="0.5" style="width:56px">
+          tile <input type="number" id="pp_clahe_tile_grid" min="2" max="16" style="width:56px">
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_hist_eq_enabled"> Histogram Equalization</label>
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_denoise_enabled"> Denoising</label>
+          strength <input type="number" id="pp_denoise_strength" min="1" max="30" style="width:56px">
+        </div>
+        <div class="pp-row">
+          <label class="checkbox"><input type="checkbox" id="pp_morphology_enabled"> Morphology</label>
+          <select id="pp_morphology_operation">
+            <option value="open">Open</option>
+            <option value="close">Close</option>
+            <option value="erode">Erode</option>
+            <option value="dilate">Dilate</option>
+          </select>
+          kernel <input type="number" id="pp_morphology_kernel" min="1" max="31" step="2" style="width:56px">
+          iter <input type="number" id="pp_morphology_iterations" min="1" max="10" style="width:56px">
+        </div>
+      </div>
+      <p class="hint">Fixed order: denoise → blur variants → CLAHE → hist-eq → sharpen → gamma → morphology. Toggle one at a time against the paused-frame HSV mask view above to see its effect.</p>
+    </section>
+
+    <!-- Tracking -->
+    <section class="panel panel-tracking">
+      <h2>Tracking</h2>
+      <div class="field-grid">
+        <label>Tracker
+          <select id="tracker_type">
+            <option value="centroid">Centroid</option>
+            <option value="sort" disabled>SORT (Phase 3)</option>
+            <option value="bytetrack" disabled>ByteTrack (Phase 3)</option>
+            <option value="deepsort" disabled>DeepSORT (Phase 3)</option>
+          </select>
+        </label>
+        <label>Max Distance (px) <input type="number" id="max_distance"></label>
+        <label>Object Timeout (frames) <input type="number" id="object_timeout"></label>
+        <label>IOU Threshold <input type="number" id="iou_threshold" step="0.05" disabled title="Reserved for IOU-based trackers — not used by centroid tracking"></label>
+      </div>
+    </section>
+
+    <!-- Output & Logging -->
+    <section class="panel panel-output">
+      <h2>Output &amp; Logging</h2>
+      <p class="hint">These apply to the generated <code>runtime.py</code> (production). This live Studio session keeps its manual Snapshot/Record buttons regardless.</p>
+      <div class="field-grid">
+        <label class="checkbox"><input type="checkbox" id="save_snapshots"> Save snapshot on each count</label>
+        <label class="checkbox"><input type="checkbox" id="save_videos"> Record continuously</label>
+        <label class="checkbox"><input type="checkbox" id="csv_logging"> CSV event log</label>
+        <label class="checkbox"><input type="checkbox" id="json_logging"> JSON event log</label>
+        <label class="checkbox"><input type="checkbox" id="show_window"> Show debug window</label>
+        <label>Output folder <input type="text" id="output_folder"></label>
+      </div>
+    </section>
+
+    <!-- Performance -->
+    <section class="panel panel-performance">
+      <h2>Performance</h2>
+      <div class="slider-grid">
+        <label>Frame Skip <input type="range" id="frame_skip" min="0" max="10"><output></output></label>
+        <label>Resize Factor <input type="range" id="resize_factor" min="0.25" max="1" step="0.05"><output></output></label>
+      </div>
+      <div class="field-grid">
+        <label>Thread Count <input type="number" id="thread_count" disabled title="Reserved — not yet wired"></label>
+        <label class="checkbox"><input type="checkbox" id="perf_gpu" disabled title="Reserved — not yet wired"> GPU</label>
+        <label class="checkbox"><input type="checkbox" id="pi_optimization" disabled title="Reserved — not yet wired"> Pi Optimization</label>
+      </div>
+    </section>
+
+    <!-- Counting lines -->
+    <section class="panel panel-lines">
+      <h2>Counting Lines</h2>
+      <p class="hint">Direction totals (IN/OUT) only aggregate lines labelled exactly "IN"/"OUT" — custom labels still show per-line.</p>
+      <div id="lines-list"></div>
+      <button id="btn-add-line" class="btn">+ Add Line</button>
+    </section>
+
+    <!-- Config / actions -->
+    <section class="panel panel-actions">
+      <h2>Project &amp; Recording</h2>
+      <div class="action-row">
+        <input type="text" id="new-project-name" placeholder="new project name">
+        <button id="btn-new-project" class="btn">New Project</button>
+      </div>
+      <div class="action-row">
+        <select id="project-select"></select>
+        <button id="btn-open-project" class="btn">Open Project</button>
+        <button id="btn-save-project" class="btn btn-accent">Save Configuration</button>
+      </div>
+      <p class="hint">Save Configuration writes <code>config.json</code> and regenerates <code>runtime.py</code> inside the open project's folder under <code>Projects/</code>.</p>
+      <div class="action-row">
+        <button id="btn-build-app" class="btn btn-accent">Build Application</button>
+      </div>
+      <p class="hint" id="build-status">Packages the project into a standalone executable (PyInstaller) under <code>Projects/&lt;name&gt;/build/</code>. Native to whatever OS the Studio runs on — a real <code>.exe</code> requires running this same build from Windows.</p>
+      <div class="action-row">
+        <button id="btn-snapshot" class="btn">Snapshot</button>
+        <button id="btn-record-start" class="btn btn-accent">Start Recording</button>
+        <button id="btn-record-stop" class="btn btn-warn">Stop Recording</button>
+      </div>
+      <div class="action-row">
+        <button id="btn-export" class="btn">Export JSON</button>
+        <input type="file" id="import-file" accept="application/json">
+        <button id="btn-import" class="btn">Import JSON</button>
+        <button id="btn-reset" class="btn btn-danger">Reset Defaults</button>
+      </div>
+      <p id="action-msg" class="hint"></p>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

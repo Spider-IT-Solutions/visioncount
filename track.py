@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 
 
-cap=cv2.VideoCapture('box6.mp4')
+cap=cv2.VideoCapture('box-passing.mp4')
 
 def nothing(x):
     pass
@@ -23,6 +23,9 @@ cv2.createTrackbar("U - V", "Trackbars", 255, 255, nothing)
 
 while True:
      ret,frame=cap.read()
+     if not ret:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        continue
      frame=cv2.resize(frame,(640,480))
      hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     
@@ -43,6 +46,8 @@ while True:
      time.sleep(0.1)
      key = cv2.waitKey(1) & 0xFF
      if key == ord("q"):
+        print(f"lower_range=np.array([{l_h},{l_s},{l_v}])")
+        print(f"upper_range=np.array([{u_h},{u_s},{u_v}])")
         break
 cap.release()
 cv2.destroyAllWindows()

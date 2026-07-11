@@ -1,0 +1,5 @@
+flask>=3.0
+opencv-python>=4.8
+numpy>=1.26
+psutil>=5.9
+pyinstaller>=6.0

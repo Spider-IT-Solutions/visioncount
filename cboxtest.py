@@ -3,9 +3,9 @@ import numpy as np
 from tracker import*
 import cvzone
 
-cap=cv2.VideoCapture('box6.mp4')
-lower_range=np.array([0,45,59])
-upper_range=np.array([117,104,149])
+cap=cv2.VideoCapture('box-passing.mp4')
+lower_range=np.array([0,62,100])
+upper_range=np.array([179,255,255])
 
 def RGB(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE :  
@@ -53,5 +53,6 @@ while True:
     cv2.imshow("RGB",frame)
     if cv2.waitKey(1)&0xFF==27:
         break
+print(f"Final box count: {len(counter)}")
 cap.release()
 cv2.destroyAllWindows()
