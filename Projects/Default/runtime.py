@@ -9,10 +9,17 @@ Application; app_dir() below makes both cases resolve paths identically.
 
 Usage:
   runtime.py --video path/to/video.mp4
+  runtime.py --video path/to/video.mp4 --loop --display
   runtime.py --image path/to/image.jpg
   runtime.py --camera 0
   runtime.py --rtsp rtsp://host/stream
   (no args: uses camera.* from config.json as-is)
+
+  --loop replays a --video source continuously (Ctrl-C to stop) instead of
+  exiting after one pass - useful for watching counting behavior repeatedly
+  while tuning. Add --display to see the annotated feed live.
+  --stats-interval N logs session_total/in/out/objects_per_min/live_count/
+  avg_confidence/fps/proc_ms/cpu/ram/pi_temp every N seconds (default 5).
 """
 import argparse
 import csv
@@ -21,6 +28,7 @@ import logging
 import os
 import sys
 import time
+from collections import deque
 from datetime import datetime
 
 
@@ -47,6 +55,7 @@ from pipeline.vision_pipeline import VisionPipeline
 from utils.event_logger import EventLogger
 from utils.recorder import Recorder
 from utils.snapshot import save_snapshot
+from utils.system_stats import get_system_stats
 
 CONFIG_PATH = os.path.join(_APP_DIR, "config.json")
 
@@ -109,7 +118,7 @@ def run_image_mode(image_path, cfg, pipeline, output_dir, logger):
     logger.info(f"counts: IN={counts['total_in']} OUT={counts['total_out']} TOTAL={counts['total']}")
 
 
-def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_single_pass, annotate_video_path):
+def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_single_pass, annotate_video_path, stats_interval):
     camera = VideoStream(cfg["camera"])
     camera.start()
 
@@ -125,7 +134,19 @@ def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_singl
     frame_counter = 0
     t0 = time.time()
 
-    logger.info("runtime started" + (" (single pass)" if forced_single_pass else " - Ctrl-C to stop"))
+    fps_window = deque(maxlen=30)
+    crossing_times = deque()
+    last_loop_time = time.time()
+    last_stats_log = time.time()
+
+    looping_video = cfg["camera"]["source_type"] == "file" and cfg["camera"].get("loop")
+    if forced_single_pass:
+        mode_msg = " (single pass)"
+    elif looping_video:
+        mode_msg = " (looping video - Ctrl-C to stop)"
+    else:
+        mode_msg = " - Ctrl-C to stop"
+    logger.info("runtime started" + mode_msg)
     try:
         while True:
             if camera.ended:
@@ -141,7 +162,19 @@ def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_singl
             if frame_skip > 0 and frame_counter % (frame_skip + 1) != 0:
                 continue
 
+            t_proc0 = time.time()
             annotated, tracks, events, stats, debug = pipeline.process(frame, cfg)
+            proc_ms = (time.time() - t_proc0) * 1000
+
+            now = time.time()
+            for _ in events:
+                crossing_times.append(now)
+            while crossing_times and now - crossing_times[0] > 60:
+                crossing_times.popleft()
+
+            loop_dt = now - last_loop_time
+            last_loop_time = now
+            fps_window.append(1.0 / loop_dt if loop_dt > 0 else 0.0)
 
             for event in events:
                 event_logger.log(event)
@@ -155,6 +188,24 @@ def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_singl
                 cv2.imshow(cfg["project"]["name"], annotated)
                 if cv2.waitKey(1) & 0xFF == 27:
                     break
+
+            if stats_interval > 0 and now - last_stats_log >= stats_interval:
+                last_stats_log = now
+                counts = stats.get("counts", {"total_in": 0, "total_out": 0, "total": 0})
+                sys_stats = get_system_stats()
+                fps = sum(fps_window) / len(fps_window) if fps_window else 0.0
+                temp = sys_stats["temp_c"]
+                logger.info(
+                    "stats: session_total=%d in=%d out=%d objects_per_min=%d live_count=%d "
+                    "avg_confidence=%.2f fps=%.1f proc_ms=%.1f cpu=%.0f%% ram=%.0f%% pi_temp=%s"
+                    % (
+                        counts.get("total", 0), counts.get("total_in", 0), counts.get("total_out", 0),
+                        len(crossing_times), stats.get("object_count_current", len(tracks)),
+                        stats.get("avg_confidence", 0.0), fps, proc_ms,
+                        sys_stats["cpu_percent"], sys_stats["ram_percent"],
+                        f"{temp}C" if temp is not None else "-",
+                    )
+                )
     except KeyboardInterrupt:
         logger.info("interrupted by user")
     finally:
@@ -176,11 +227,13 @@ def run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_singl
 def main():
     parser = argparse.ArgumentParser(description="Vision Studio standalone application")
     parser.add_argument("--image", help="process a single image and exit")
-    parser.add_argument("--video", help="process a video file (single pass)")
+    parser.add_argument("--video", help="process a video file (single pass unless --loop)")
+    parser.add_argument("--loop", action="store_true", help="replay --video continuously instead of stopping after one pass (Ctrl-C to stop)")
     parser.add_argument("--camera", type=int, help="USB camera index")
     parser.add_argument("--rtsp", help="RTSP/IP camera URL")
     parser.add_argument("--output", help="override output directory")
     parser.add_argument("--display", action="store_true", help="show a debug window")
+    parser.add_argument("--stats-interval", type=float, default=None, help="seconds between periodic stats log lines (default: from config, else 5s; 0 disables)")
     args = parser.parse_args()
 
     cfg = load_config()
@@ -203,10 +256,11 @@ def main():
         # frozen (there is no meaningful "repo root" inside a PyInstaller bundle).
         cfg["camera"]["source_type"] = "file"
         cfg["camera"]["source"] = os.path.abspath(args.video)
-        cfg["camera"]["loop"] = False
-        forced_single_pass = True
-        stem = os.path.splitext(os.path.basename(args.video))[0]
-        annotate_video_path = os.path.join(output_dir, f"{stem}_annotated.mp4")
+        cfg["camera"]["loop"] = args.loop
+        forced_single_pass = not args.loop
+        if not args.loop:
+            stem = os.path.splitext(os.path.basename(args.video))[0]
+            annotate_video_path = os.path.join(output_dir, f"{stem}_annotated.mp4")
     elif args.camera is not None:
         cfg["camera"]["source_type"] = "usb"
         cfg["camera"]["source"] = str(args.camera)
@@ -215,8 +269,11 @@ def main():
         cfg["camera"]["source"] = args.rtsp
 
     show_window = args.display or cfg["output"].get("show_window", False)
+    stats_interval = args.stats_interval
+    if stats_interval is None:
+        stats_interval = cfg.get("output", {}).get("stats_interval_s", 5.0)
     pipeline = VisionPipeline()
-    run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_single_pass, annotate_video_path)
+    run_stream_mode(cfg, pipeline, output_dir, logger, show_window, forced_single_pass, annotate_video_path, stats_interval)
 
 
 if __name__ == "__main__":

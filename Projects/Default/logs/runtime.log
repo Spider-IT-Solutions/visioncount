@@ -1,0 +1,10 @@
+2026-07-11 17:44:33,435 [INFO] runtime started (looping video - Ctrl-C to stop)
+2026-07-11 17:44:35,441 [INFO] stats: session_total=0 in=0 out=0 objects_per_min=0 live_count=0 avg_confidence=0.00 fps=152.2 proc_ms=5.5 cpu=85% ram=84% pi_temp=-
+2026-07-11 17:44:37,441 [INFO] stats: session_total=1 in=0 out=1 objects_per_min=1 live_count=0 avg_confidence=0.00 fps=166.2 proc_ms=6.5 cpu=96% ram=84% pi_temp=-
+2026-07-11 17:44:39,443 [INFO] stats: session_total=1 in=0 out=1 objects_per_min=1 live_count=0 avg_confidence=0.00 fps=92.5 proc_ms=8.6 cpu=100% ram=84% pi_temp=-
+2026-07-11 17:44:41,452 [INFO] stats: session_total=1 in=0 out=1 objects_per_min=1 live_count=0 avg_confidence=0.00 fps=96.8 proc_ms=7.9 cpu=100% ram=84% pi_temp=-
+2026-07-11 17:44:43,458 [INFO] stats: session_total=2 in=0 out=2 objects_per_min=2 live_count=0 avg_confidence=0.00 fps=99.9 proc_ms=10.3 cpu=100% ram=84% pi_temp=-
+2026-07-11 17:44:45,459 [INFO] stats: session_total=2 in=0 out=2 objects_per_min=2 live_count=0 avg_confidence=0.00 fps=96.7 proc_ms=10.3 cpu=100% ram=84% pi_temp=-
+2026-07-11 17:44:54,547 [INFO] runtime started (looping video - Ctrl-C to stop)
+2026-07-11 17:44:57,553 [INFO] stats: session_total=0 in=0 out=0 objects_per_min=0 live_count=0 avg_confidence=0.00 fps=99.7 proc_ms=5.9 cpu=85% ram=84% pi_temp=-
+2026-07-11 17:45:00,567 [INFO] stats: session_total=1 in=0 out=1 objects_per_min=1 live_count=0 avg_confidence=0.00 fps=108.1 proc_ms=6.7 cpu=89% ram=84% pi_temp=-

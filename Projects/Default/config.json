@@ -6,7 +6,7 @@
   },
   "camera": {
     "source_type": "file",
-    "source": "box-passing.mp4",
+    "source": "video1.mp4",
     "width": 640,
     "height": 480,
     "fps": 30,
@@ -64,8 +64,8 @@
     "mode": "hsv",
     "hsv": {
       "l_h": 0,
-      "l_s": 62,
-      "l_v": 100,
+      "l_s": 42,
+      "l_v": 134,
       "u_h": 179,
       "u_s": 255,
       "u_v": 255
@@ -80,25 +80,25 @@
         "name": "main",
         "type": "rect",
         "enabled": true,
-        "x": 140,
-        "y": 80,
-        "w": 360,
-        "h": 320
+        "x": 239,
+        "y": 28,
+        "w": 290,
+        "h": 390
       }
     ]
   },
   "counting": {
     "lines": [
       {
-        "id": 1,
-        "name": "line1",
-        "x1": 320,
-        "y1": 80,
-        "x2": 320,
-        "y2": 400,
+        "backward_label": "OUT",
         "enabled": true,
         "forward_label": "IN",
-        "backward_label": "OUT"
+        "id": 1,
+        "name": "line1",
+        "x1": 504,
+        "x2": 262,
+        "y1": 60,
+        "y2": 64
       }
     ],
     "entry_zone": null,
