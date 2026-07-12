@@ -55,12 +55,23 @@
         <input type="range" id="frame-scrub" min="0" max="0" value="0" style="flex:1; min-width:150px;">
         <span id="frame-label" class="hint">Frame — / —</span>
       </div>
-      <p class="hint">Pause or step to a specific frame, then tune HSV below — mask/result update live against that still frame. File sources only.</p>
+      <p class="hint">Pause or step to a specific frame, then tune the active color profile below — mask/result update live against that still frame. File sources only.</p>
       <div class="calib-views">
         <div><span>Original</span><img src="/video_feed" width="200" height="150"></div>
-        <div><span>HSV Mask</span><img src="/video_feed/mask" width="200" height="150"></div>
+        <div><span>Combined Mask</span><img src="/video_feed/mask" width="200" height="150"></div>
         <div><span>Final Detection</span><img src="/video_feed/hsv" width="200" height="150"></div>
       </div>
+
+      <h3>Color Profiles</h3>
+      <p class="hint">Mask preview above is the combined result of every ENABLED profile. To isolate one while tuning it, temporarily disable the others.</p>
+      <div id="profiles-list"></div>
+      <div class="action-row">
+        <button id="btn-add-profile" class="btn">+ Add Profile</button>
+        <button id="btn-duplicate-profile" class="btn">Duplicate Active</button>
+        <button id="btn-delete-profile" class="btn btn-danger">Delete Active</button>
+      </div>
+
+      <h3>Editing: <span id="active-profile-name">—</span></h3>
       <div class="slider-grid" id="hsv-controls">
         <label>L-H <input type="range" id="l_h" min="0" max="179"><output></output></label>
         <label>L-S <input type="range" id="l_s" min="0" max="255"><output></output></label>

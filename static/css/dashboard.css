@@ -189,6 +189,27 @@ input[type="number"], input[type="text"], select {
 }
 .line-row input[type="text"] { width: 70px; }
 
+#profiles-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.profile-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #0e151b;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+}
+.profile-row.active { border-color: var(--accent); }
+.profile-row input[type="text"] { width: 110px; }
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 @media (max-width: 980px) {
   .grid { grid-template-columns: 1fr; }
 }

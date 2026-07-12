@@ -27,10 +27,17 @@
     "morphology": { "enabled": false, "operation": "open", "kernel": 3, "iterations": 1 }
   },
   "color_calibration": {
-    "mode": "hsv",
-    "hsv": { "l_h": 0, "l_s": 62, "l_v": 100, "u_h": 179, "u_s": 255, "u_v": 255 },
-    "rgb": null,
-    "lab": null
+    "profiles": [
+      {
+        "id": 1,
+        "name": "Profile 1",
+        "enabled": true,
+        "color_space": "hsv",
+        "lower_hsv": [0, 62, 100],
+        "upper_hsv": [179, 255, 255],
+        "overlay_color": "#00FF00"
+      }
+    ]
   },
   "roi": {
     "shapes": [

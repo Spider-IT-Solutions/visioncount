@@ -61,17 +61,59 @@
     }
   },
   "color_calibration": {
-    "mode": "hsv",
-    "hsv": {
-      "l_h": 0,
-      "l_s": 44,
-      "l_v": 122,
-      "u_h": 179,
-      "u_s": 255,
-      "u_v": 255
-    },
-    "rgb": null,
-    "lab": null
+    "profiles": [
+      {
+        "id": 1,
+        "name": "White",
+        "enabled": true,
+        "color_space": "hsv",
+        "lower_hsv": [
+          0,
+          44,
+          122
+        ],
+        "upper_hsv": [
+          179,
+          255,
+          255
+        ],
+        "overlay_color": "#00FF00"
+      },
+      {
+        "name": "Blue",
+        "enabled": true,
+        "color_space": "hsv",
+        "lower_hsv": [
+          100,
+          120,
+          50
+        ],
+        "upper_hsv": [
+          130,
+          255,
+          255
+        ],
+        "id": 2,
+        "overlay_color": "#0000FF"
+      },
+      {
+        "name": "Red",
+        "enabled": true,
+        "color_space": "hsv",
+        "lower_hsv": [
+          0,
+          120,
+          70
+        ],
+        "upper_hsv": [
+          10,
+          255,
+          255
+        ],
+        "id": 3,
+        "overlay_color": "#FF0000"
+      }
+    ]
   },
   "roi": {
     "shapes": [

@@ -2,7 +2,7 @@ import copy
 import json
 import os
 
-from config.config_manager import BASE_DIR, load_defaults
+from config.config_manager import BASE_DIR, load_defaults, migrate_color_calibration
 
 PROJECTS_DIR = os.path.join(BASE_DIR, "Projects")
 
@@ -62,7 +62,7 @@ class ProjectManager:
         if not os.path.isfile(path):
             raise ValueError(f"project '{name}' not found")
         with open(path, encoding="utf-8") as f:
-            cfg = json.load(f)
+            cfg = migrate_color_calibration(json.load(f))
         self.current_name = name
         return cfg
 

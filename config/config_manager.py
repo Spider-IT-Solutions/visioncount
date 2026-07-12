@@ -27,6 +27,33 @@ def sensitivity_to_min_area(sensitivity):
     return max(20, round(3000 - sensitivity * 28))
 
 
+def migrate_color_calibration(cfg):
+    """Upgrade a pre-multi-profile config (single color_calibration.hsv dict)
+    into the profiles-list schema, in place. Safe to call on already-migrated
+    configs (no-op if "profiles" is already present)."""
+    cc = cfg.get("color_calibration") or {}
+    if "profiles" in cc:
+        return cfg
+    old_hsv = cc.get("hsv")
+    if old_hsv:
+        cfg["color_calibration"] = {
+            "profiles": [
+                {
+                    "id": 1,
+                    "name": "Profile 1",
+                    "enabled": True,
+                    "color_space": "hsv",
+                    "lower_hsv": [old_hsv["l_h"], old_hsv["l_s"], old_hsv["l_v"]],
+                    "upper_hsv": [old_hsv["u_h"], old_hsv["u_s"], old_hsv["u_v"]],
+                    "overlay_color": "#00FF00",
+                }
+            ]
+        }
+    else:
+        cfg["color_calibration"] = {"profiles": []}
+    return cfg
+
+
 class ConfigManager:
     """Thread-safe in-memory config, backed by whichever project is currently
     open (see config/project_manager.py). Both the processing thread (every
@@ -67,7 +94,7 @@ class ConfigManager:
             return json.dumps(self._config, indent=2)
 
     def import_json(self, raw):
-        loaded = json.loads(raw)
+        loaded = migrate_color_calibration(json.loads(raw))
         with self._lock:
             self._config = loaded
             return copy.deepcopy(self._config)

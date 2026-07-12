@@ -4,6 +4,8 @@ const jsonHeaders = { "Content-Type": "application/json" };
 let cfg = null;
 let roi = null;
 let lines = [];
+let profiles = [];
+let activeProfileId = null;
 let dragging = null;
 let scrubDragging = false;
 
@@ -39,7 +41,6 @@ function setSliderValue(id, val) {
 
 function populateFromConfig(c) {
   cfg = c;
-  ["l_h", "l_s", "l_v", "u_h", "u_s", "u_v"].forEach((k) => setSliderValue(k, c.color_calibration.hsv[k]));
   setSliderValue("confidence_threshold", c.detection.confidence_threshold);
   setSliderValue("nms_threshold", c.detection.nms_threshold);
   setSliderValue("sensitivity", c.detection.sensitivity);
@@ -175,6 +176,118 @@ function onLineDelete(e) {
   const idx = +e.target.dataset.idx;
   lines.splice(idx, 1);
   postLines();
+}
+
+function activeProfile() {
+  return profiles.find((p) => p.id === activeProfileId) || null;
+}
+
+function setActiveProfile(id) {
+  activeProfileId = id;
+  const p = activeProfile();
+  qs("active-profile-name").textContent = p ? p.name : "—";
+  if (p) {
+    setSliderValue("l_h", p.lower_hsv[0]);
+    setSliderValue("l_s", p.lower_hsv[1]);
+    setSliderValue("l_v", p.lower_hsv[2]);
+    setSliderValue("u_h", p.upper_hsv[0]);
+    setSliderValue("u_s", p.upper_hsv[1]);
+    setSliderValue("u_v", p.upper_hsv[2]);
+  }
+  renderProfilesList();
+}
+
+function postProfiles() {
+  return fetch("/api/color_profiles", { method: "POST", headers: jsonHeaders, body: JSON.stringify(profiles) })
+    .then((r) => r.json())
+    .then((d) => {
+      profiles = d;
+      if (!activeProfile() && profiles.length) activeProfileId = profiles[0].id;
+      setActiveProfile(activeProfileId);
+    });
+}
+const postProfilesDebounced = debounce(postProfiles, 150);
+
+function renderProfilesList() {
+  const container = qs("profiles-list");
+  container.innerHTML = "";
+  profiles.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "profile-row" + (p.id === activeProfileId ? " active" : "");
+    row.innerHTML = `
+      <span class="color-swatch" style="background:${p.overlay_color}"></span>
+      <button class="btn profile-edit" data-id="${p.id}">${p.id === activeProfileId ? "Editing" : "Edit"}</button>
+      <input type="text" class="profile-name" data-id="${p.id}" value="${p.name}">
+      <input type="color" class="profile-color" data-id="${p.id}" value="${p.overlay_color}">
+      <label><input type="checkbox" class="profile-enabled" data-id="${p.id}" ${p.enabled ? "checked" : ""}> On</label>
+    `;
+    container.appendChild(row);
+  });
+  container.querySelectorAll(".profile-edit").forEach((el) =>
+    el.addEventListener("click", (e) => setActiveProfile(+e.target.dataset.id))
+  );
+  container.querySelectorAll(".profile-name").forEach((el) =>
+    el.addEventListener("change", (e) => {
+      const p = profiles.find((x) => x.id === +e.target.dataset.id);
+      if (p) p.name = e.target.value || p.name;
+      postProfiles();
+    })
+  );
+  container.querySelectorAll(".profile-color").forEach((el) =>
+    el.addEventListener("change", (e) => {
+      const p = profiles.find((x) => x.id === +e.target.dataset.id);
+      if (p) p.overlay_color = e.target.value;
+      postProfiles();
+    })
+  );
+  container.querySelectorAll(".profile-enabled").forEach((el) =>
+    el.addEventListener("change", (e) => {
+      const p = profiles.find((x) => x.id === +e.target.dataset.id);
+      if (p) p.enabled = e.target.checked;
+      postProfiles();
+    })
+  );
+}
+
+function loadColorProfiles() {
+  return fetchJSON("/api/color_profiles").then((d) => {
+    profiles = d;
+    if (!activeProfile() && profiles.length) activeProfileId = profiles[0].id;
+    setActiveProfile(activeProfileId);
+  });
+}
+
+function wireProfileButtons() {
+  qs("btn-add-profile").addEventListener("click", () => {
+    profiles.push({
+      name: `Profile ${profiles.length + 1}`,
+      enabled: true,
+      color_space: "hsv",
+      lower_hsv: [0, 62, 100],
+      upper_hsv: [179, 255, 255],
+    });
+    postProfiles().then(() => setActiveProfile(profiles[profiles.length - 1].id));
+  });
+
+  qs("btn-duplicate-profile").addEventListener("click", () => {
+    const p = activeProfile();
+    if (!p) return showMsg("No active profile to duplicate");
+    profiles.push({
+      name: p.name + " copy",
+      enabled: p.enabled,
+      color_space: p.color_space,
+      lower_hsv: [...p.lower_hsv],
+      upper_hsv: [...p.upper_hsv],
+    });
+    postProfiles().then(() => setActiveProfile(profiles[profiles.length - 1].id));
+  });
+
+  qs("btn-delete-profile").addEventListener("click", () => {
+    if (!activeProfileId) return;
+    profiles = profiles.filter((p) => p.id !== activeProfileId);
+    activeProfileId = profiles.length ? profiles[0].id : null;
+    postProfiles();
+  });
 }
 
 function clamp(v, lo, hi) {
@@ -368,10 +481,18 @@ function wireFrameControls() {
 }
 
 function wireInputs() {
-  ["l_h", "l_s", "l_v", "u_h", "u_s", "u_v"].forEach((k) => {
+  const HSV_TARGETS = {
+    l_h: ["lower_hsv", 0], l_s: ["lower_hsv", 1], l_v: ["lower_hsv", 2],
+    u_h: ["upper_hsv", 0], u_s: ["upper_hsv", 1], u_v: ["upper_hsv", 2],
+  };
+  Object.keys(HSV_TARGETS).forEach((k) => {
     qs(k).addEventListener("input", (e) => {
       setSliderValue(k, e.target.value);
-      patchConfigDebounced({ color_calibration: { hsv: { [k]: +e.target.value } } });
+      const p = activeProfile();
+      if (!p) return;
+      const [field, idx] = HSV_TARGETS[k];
+      p[field][idx] = +e.target.value;
+      postProfilesDebounced();
     });
   });
 
@@ -630,6 +751,8 @@ function refreshRoiAndLines() {
     lines = l;
     renderLinesList();
   });
+  activeProfileId = null;
+  loadColorProfiles();
 }
 
 function loadBackends() {
@@ -667,6 +790,7 @@ async function init() {
   setRoiFields();
   lines = await fetchJSON("/api/lines");
   renderLinesList();
+  await loadColorProfiles();
   await loadBackends();
   await loadProjects();
 
@@ -674,6 +798,7 @@ async function init() {
   wireButtons();
   wireCanvas();
   wireFrameControls();
+  wireProfileButtons();
 
   requestAnimationFrame(draw);
   updateStats();

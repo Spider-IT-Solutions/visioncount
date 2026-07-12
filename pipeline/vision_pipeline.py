@@ -44,7 +44,7 @@ class VisionPipeline:
                 Detection(
                     x=int(d.x / resize_factor), y=int(d.y / resize_factor),
                     w=int(d.w / resize_factor), h=int(d.h / resize_factor),
-                    confidence=d.confidence,
+                    confidence=d.confidence, label=d.label,
                 )
                 for d in detections
             ]
@@ -67,7 +67,8 @@ class VisionPipeline:
         lines_cfg = cfg["counting"]["lines"]
         events = self.line_counter.update(tracks, lines_cfg)
 
-        annotated = self._annotate(adjusted.copy(), roi_cfg, lines_cfg, tracks)
+        profiles = cfg["color_calibration"].get("profiles", [])
+        annotated = self._annotate(adjusted.copy(), roi_cfg, lines_cfg, tracks, profiles)
 
         stats_partial = {
             "object_count_current": len(tracks),
@@ -94,7 +95,19 @@ class VisionPipeline:
             frame = cv2.flip(frame, -1)
         return frame
 
-    def _annotate(self, frame, roi_cfg, lines_cfg, tracks):
+    @staticmethod
+    def _hex_to_bgr(hex_color):
+        hex_color = (hex_color or "").lstrip("#")
+        if len(hex_color) != 6:
+            return (0, 255, 0)
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        return (b, g, r)
+
+    def _annotate(self, frame, roi_cfg, lines_cfg, tracks, profiles):
+        color_by_label = {
+            p["name"]: self._hex_to_bgr(p.get("overlay_color"))
+            for p in profiles
+        }
         for shape in roi_cfg.get("shapes", []):
             if shape.get("enabled", True) and shape.get("type") == "rect":
                 x, y, w, h = shape["x"], shape["y"], shape["w"], shape["h"]
@@ -113,10 +126,11 @@ class VisionPipeline:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
 
         for t in tracks:
-            cv2.rectangle(frame, (t.x, t.y), (t.x + t.w, t.y + t.h), (0, 255, 0), 2)
+            color = color_by_label.get(t.label, (0, 255, 0))
+            cv2.rectangle(frame, (t.x, t.y), (t.x + t.w, t.y + t.h), color, 2)
             cv2.circle(frame, t.center, 4, (0, 0, 255), -1)
-            cv2.putText(frame, f"ID {t.id} {t.confidence:.2f}", (t.x, max(0, t.y - 8)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(frame, f"ID {t.id} {t.label} {t.confidence:.2f}", (t.x, max(0, t.y - 8)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         cv2.putText(frame, f'IN:{counts["total_in"]} OUT:{counts["total_out"]} TOTAL:{counts["total"]}',
                     (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)

@@ -12,6 +12,7 @@ class Track:
     confidence: float
     center: tuple
     prev_center: tuple  # None on the frame a track is first created
+    label: str = "object"
 
 
 class CentroidTracker:
@@ -65,6 +66,7 @@ class CentroidTracker:
                     confidence=det.confidence,
                     center=(cx, cy),
                     prev_center=prev_center,
+                    label=det.label,
                 )
             )
 

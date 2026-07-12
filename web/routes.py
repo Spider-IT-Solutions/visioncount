@@ -38,6 +38,28 @@ def _normalize_lines(lines):
     return normalized
 
 
+_PROFILE_PALETTE = ["#00FF00", "#0000FF", "#FF0000", "#FFFF00", "#FF00FF", "#00FFFF", "#FF8000", "#8000FF"]
+
+
+def _normalize_profiles(profiles):
+    existing_ids = [p["id"] for p in profiles if "id" in p]
+    next_id = (max(existing_ids) + 1) if existing_ids else 1
+    normalized = []
+    for idx, profile in enumerate(profiles):
+        profile = dict(profile)
+        if "id" not in profile:
+            profile["id"] = next_id
+            next_id += 1
+        profile.setdefault("name", f"Profile {profile['id']}")
+        profile.setdefault("enabled", True)
+        profile.setdefault("color_space", "hsv")
+        profile.setdefault("lower_hsv", [0, 62, 100])
+        profile.setdefault("upper_hsv", [179, 255, 255])
+        profile.setdefault("overlay_color", _PROFILE_PALETTE[idx % len(_PROFILE_PALETTE)])
+        normalized.append(profile)
+    return normalized
+
+
 def _switch_to_project(cfg):
     _state["config_manager"].replace_all(cfg)
     _state["camera"].reconfigure(cfg["camera"])
@@ -133,6 +155,15 @@ def api_delete_line(line_id):
     lines = [l for l in cfg_manager.get("counting")["lines"] if l["id"] != line_id]
     cfg_manager.update({"counting": {"lines": lines}})
     return jsonify(lines)
+
+
+@bp.route("/api/color_profiles", methods=["GET", "POST"])
+def api_color_profiles():
+    cfg_manager = _state["config_manager"]
+    if request.method == "POST":
+        profiles = _normalize_profiles(request.get_json(force=True))
+        cfg_manager.update({"color_calibration": {"profiles": profiles}})
+    return jsonify(cfg_manager.get("color_calibration")["profiles"])
 
 
 @bp.route("/api/camera/restart", methods=["POST"])

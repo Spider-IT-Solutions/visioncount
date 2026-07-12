@@ -5,4 +5,5 @@ snapshots/*.jpg
 recordings/*.mp4
 Projects/*/snapshots/*.jpg
 Projects/*/output/*
+Projects/*/logs/*
 Projects/*/build/
